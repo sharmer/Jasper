@@ -416,7 +416,7 @@ class JuliusVocabulary(AbstractVocabulary):
         return word_defs
 
     def _compile_vocabulary(self, phrases):
-        prefix = 'jasper'
+        prefix = 'Jasper'
         tmpdir = tempfile.mkdtemp()
 
         lexicon_file = jasperpath.data('julius-stt', 'VoxForge.tgz')
@@ -491,7 +491,7 @@ def get_phrases_from_module(module):
 
 def get_keyword_phrases():
     """
-    Gets the keyword phrases from the keywords file in the jasper data dir.
+    Gets the keyword phrases from the keywords file in the Jasper data dir.
 
     Returns:
         A list of keyword phrases.

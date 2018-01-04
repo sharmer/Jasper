@@ -16,13 +16,13 @@ else:
 logger = logging.getLogger(__name__)
 
 
-def check_network_connection(server="www.google.com"):
+def check_network_connection(server="www.baidu.com"):
     """
-    Checks if jasper can connect a network server.
+    Checks if Jasper can connect a network server.
 
     Arguments:
         server -- (optional) the server to connect with (Default:
-                  "www.google.com")
+                  "www.baidu.com")
 
     Returns:
         True or False
@@ -147,7 +147,7 @@ def run():
     if loglvl == logging.NOTSET or loglvl > logging.INFO:
         logger.setLevel(logging.INFO)
 
-    logger.info("Starting jasper diagnostic at %s" % time.strftime("%c"))
+    logger.info("Starting Jasper diagnostic at %s" % time.strftime("%c"))
     logger.info("Git revision: %r", get_git_revision())
 
     failed_checks = 0

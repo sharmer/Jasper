@@ -1,0 +1,30 @@
+# Jasper core dependencies
+APScheduler
+argparse
+mock
+pytz
+PyYAML
+requests
+pyaudio
+
+# APScheduler require futures in python 2.7
+futures
+
+# Pocketsphinx STT engine
+#cmuclmtk==0.1.5
+
+# HN module
+#beautifulsoup4==4.3.2
+#semantic==1.0.3
+
+# Birthday/Notifications modules
+#facebook-sdk==0.4.0
+
+# Weather/News modules
+feedparser
+
+# Gmail module
+python-dateutil
+
+# MPDControl module
+#python-mpd==0.3.0
