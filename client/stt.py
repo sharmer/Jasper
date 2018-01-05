@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8-*-
 import os
+import time
 import wave
 import json
 import tempfile
@@ -15,6 +16,7 @@ import yaml
 import jasperpath
 import diagnose
 import vocabcompiler
+import hashlib, base64
 
 
 class AbstractSTTEngine(object):
@@ -427,26 +429,28 @@ class GoogleSTT(AbstractSTTEngine):
         return diagnose.check_network_connection()
 
 
-class AttSTT(AbstractSTTEngine):
+class BaiduSTT(AbstractSTTEngine):
     """
-    Speech-To-Text implementation which relies on the AT&T Speech API.
+    Speech-To-Text implementation which relies on the Baidu Speech API.
 
-    This implementation requires an AT&T app_key/app_secret to be present in
-    profile.yml. Please sign up at http://developer.att.com/apis/speech and
+    This implementation requires an Baidu app_key/app_secret to be present in
+    profile.yml. Please sign up at http://yuyin.baidu.com/ and
     create a new app. You can then take the app_key/app_secret and put it into
     your profile.yml:
         ...
-        stt_engine: att
-        att-stt:
-          app_key:    4xxzd6abcdefghijklmnopqrstuvwxyz
-          app_secret: 6o5jgiabcdefghijklmnopqrstuvwxyz
+        stt_engine: baidu-stt
+        baidu_api:
+          app_key:    LMFYhLdXSSthxCNLR7uxFszQ
+          app_secret: 14dbd10057xu7b256e537455698c0e4e
     """
 
-    SLUG = "att"
+    SLUG = 'baidu-stt'
 
     def __init__(self, app_key, app_secret):
         self._logger = logging.getLogger(__name__)
-        self._token = None
+        self.access_token = ''
+        self.expires_in = 0
+        self.current_time = 0
         self.app_key = app_key
         self.app_secret = app_secret
 
@@ -454,166 +458,82 @@ class AttSTT(AbstractSTTEngine):
     def get_config(cls):
         # FIXME: Replace this as soon as we have a config module
         config = {}
-        # Try to get AT&T app_key/app_secret from config
+        # Try to get baidu app_key/app_secret from config
         profile_path = jasperpath.config('profile.yml')
         if os.path.exists(profile_path):
             with open(profile_path, 'r') as f:
                 profile = yaml.safe_load(f)
-                if 'att-stt' in profile:
-                    if 'app_key' in profile['att-stt']:
-                        config['app_key'] = profile['att-stt']['app_key']
-                    if 'app_secret' in profile['att-stt']:
-                        config['app_secret'] = profile['att-stt']['app_secret']
+                if 'baidu_api' in profile:
+                    if 'app_key' in profile['baidu_api']:
+                        config['app_key'] = profile['baidu_api']['app_key']
+                    if 'app_secret' in profile['baidu_api']:
+                        config['app_secret'] = profile['baidu_api']['app_secret']
         return config
 
-    @property
-    def token(self):
-        if not self._token:
-            headers = {'content-type': 'application/x-www-form-urlencoded',
-                       'accept': 'application/json'}
-            payload = {'client_id': self.app_key,
-                       'client_secret': self.app_secret,
-                       'scope': 'SPEECH',
-                       'grant_type': 'client_credentials'}
-            r = requests.post('https://api.att.com/oauth/v4/token',
-                              data=payload,
-                              headers=headers)
-            self._token = r.json()['access_token']
-        return self._token
+    def get_token(self):
+        # Check the access_token expires or not
+        # Why minus 30, I don't know, this is how official sample do
+        if self.current_time + self.expires_in - 30 > int(time.time()):
+            return
 
-    def transcribe(self, fp):
-        data = fp.read()
-        r = self._get_response(data)
-        if r.status_code == requests.codes['unauthorized']:
-            # Request token invalid, retry once with a new token
-            self._logger.warning('OAuth access token invalid, generating a ' +
-                                 'new one and retrying...')
-            self._token = None
-            r = self._get_response(data)
+        URL = 'https://aip.baidubce.com/oauth/2.0/token'
+        params = urllib.urlencode({'grant_type':    'client_credentials',
+                                   'client_id':     self.app_key,
+                                   'client_secret': self.app_secret})
+        r = requests.get(URL, params=params)
         try:
             r.raise_for_status()
+            self.access_token = r.json()['access_token']
+            self.expires_in = int(r.json()['expires_in'])
+            self.current_time = int(time.time())
+            return
         except requests.exceptions.HTTPError:
-            self._logger.critical('Request failed with response: %r',
-                                  r.text,
-                                  exc_info=True)
-            return []
-        except requests.exceptions.RequestException:
-            self._logger.critical('Request failed.', exc_info=True)
-            return []
-        else:
-            try:
-                recognition = r.json()['Recognition']
-                if recognition['Status'] != 'OK':
-                    raise ValueError(recognition['Status'])
-                results = [(x['Hypothesis'], x['Confidence'])
-                           for x in recognition['NBest']]
-            except ValueError as e:
-                self._logger.debug('Recognition failed with status: %s',
-                                   e.args[0])
-                return []
-            except KeyError:
-                self._logger.critical('Cannot parse response.',
-                                      exc_info=True)
-                return []
-            else:
-                transcribed = [x[0].upper() for x in sorted(results,
-                                                            key=lambda x: x[1],
-                                                            reverse=True)]
-                self._logger.info('Transcribed: %r', transcribed)
-                return transcribed
-
-    def _get_response(self, data):
-        headers = {'authorization': 'Bearer %s' % self.token,
-                   'accept': 'application/json',
-                   'content-type': 'audio/wav'}
-        return requests.post('https://api.att.com/speech/v3/speechToText',
-                             data=data,
-                             headers=headers)
-
-    @classmethod
-    def is_available(cls):
-        return diagnose.check_network_connection()
-
-
-class WitAiSTT(AbstractSTTEngine):
-    """
-    Speech-To-Text implementation which relies on the Wit.ai Speech API.
-
-    This implementation requires an Wit.ai Access Token to be present in
-    profile.yml. Please sign up at https://wit.ai and copy your instance
-    token, which can be found under Settings in the Wit console to your
-    profile.yml:
-        ...
-        stt_engine: witai
-        witai-stt:
-          access_token:    ERJKGE86SOMERANDOMTOKEN23471AB
-    """
-
-    SLUG = "witai"
-
-    def __init__(self, access_token):
-        self._logger = logging.getLogger(__name__)
-        self.token = access_token
-
-    @classmethod
-    def get_config(cls):
-        # FIXME: Replace this as soon as we have a config module
-        config = {}
-        # Try to get wit.ai Auth token from config
-        profile_path = jasperpath.config('profile.yml')
-        if os.path.exists(profile_path):
-            with open(profile_path, 'r') as f:
-                profile = yaml.safe_load(f)
-                if 'witai-stt' in profile:
-                    if 'access_token' in profile['witai-stt']:
-                        config['access_token'] = \
-                            profile['witai-stt']['access_token']
-        return config
-
-    @property
-    def token(self):
-        return self._token
-
-    @token.setter
-    def token(self, value):
-        self._token = value
-        self._headers = {'Authorization': 'Bearer %s' % self.token,
-                         'accept': 'application/json',
-                         'Content-Type': 'audio/wav'}
-
-    @property
-    def headers(self):
-        return self._headers
+            self._logger.critical('Token request failed with response: %r', r.text, exc_info=True)
+            return
 
     def transcribe(self, fp):
-        data = fp.read()
-        r = requests.post('https://api.wit.ai/speech?v=20150101',
-                          data=data,
-                          headers=self.headers)
+        try:
+            wav_file = wave.open(fp, 'rb')
+        except IOError:
+            self._logger.critical('wav file not found: %s', fp, exc_info=True)
+            return []
+        n_frames = wav_file.getnframes()
+        frame_rate = wav_file.getframerate()
+        audio = wav_file.readframes(n_frames)
+        base_data = base64.b64encode(audio)
+        self.get_token()
+        data = {'format':  'wav',
+                'token':   self.access_token,
+                'len':     len(audio),
+                'rate':    frame_rate,
+                'speech':  base_data,
+                'cuid':    hashlib.md5(self.access_token.encode()).hexdigest(),
+                'channel': 1}
+        data = json.dumps(data)
+        r = requests.post('http://vop.baidu.com/server_api', data=data,
+                          headers={'content-type': 'application/json'})
         try:
             r.raise_for_status()
-            text = r.json()['_text']
+            text = ''
+            if 'result' in r.json():
+                text = r.json()['result'][0].encode('utf-8')
         except requests.exceptions.HTTPError:
-            self._logger.critical('Request failed with response: %r',
-                                  r.text,
-                                  exc_info=True)
+            self._logger.critical('Request failed with response: %r', r.text, exc_info=True)
             return []
         except requests.exceptions.RequestException:
             self._logger.critical('Request failed.', exc_info=True)
             return []
         except ValueError as e:
-            self._logger.critical('Cannot parse response: %s',
-                                  e.args[0])
+            self._logger.critical('Cannot parse response: %s', e.args[0])
             return []
         except KeyError:
-            self._logger.critical('Cannot parse response.',
-                                  exc_info=True)
+            self._logger.critical('Cannot parse response.', exc_info=True)
             return []
         else:
             transcribed = []
             if text:
                 transcribed.append(text.upper())
-            self._logger.info('Transcribed: %r', transcribed)
+            self._logger.info('Transcribed: %s' % transcribed)
             return transcribed
 
     @classmethod

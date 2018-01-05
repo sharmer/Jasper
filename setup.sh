@@ -85,13 +85,9 @@ install_deps() {
     fi
 
     if found_exe apt-get; then
-        $SUDO apt-get install -y git python python-dev python-setuptools python-virtualenv python-gobject-dev virtualenvwrapper libtool libffi-dev libssl-dev autoconf automake bison swig libglib2.0-dev s3cmd portaudio19-dev mpg123 screen flac curl libicu-dev pkg-config automake libjpeg-dev libfann-dev build-essential jq
-    elif found_exe pacman; then
-        $SUDO pacman -S --needed git python2 python2-pip python2-setuptools python2-virtualenv python2-gobject python-virtualenvwrapper libtool libffi openssl autoconf bison swig glib2 s3cmd portaudio mpg123 screen flac curl pkg-config icu automake libjpeg-turbo base-devel jq
-    elif found_exe dnf; then
-        $SUDO dnf install -y git python python-devel python-pip python-setuptools python-virtualenv pygobject2-devel python-virtualenvwrapper libtool libffi-devel openssl-devel autoconf bison swig glib2-devel s3cmd portaudio-devel mpg123 mpg123-plugins-pulseaudio screen curl pkgconfig libicu-devel automake libjpeg-turbo-devel fann-devel gcc-c++ redhat-rpm-config jq
+        $SUDO apt-get install -y python python-dev python-setuptools python-virtualenv virtualenvwrapper bison libasound2-dev libportaudio-dev python-pyaudio libmad libmad-dev
     elif found_exe yum; then
-        $SUDO yum install -y git python python-devel python-pip python-setuptools python-virtualenv pygobject2-devel python-virtualenvwrapper libtool libffi-devel openssl-devel autoconf bison swig glib2-devel s3cmd portaudio-devel mpg123 mpg123-plugins-pulseaudio screen curl pkgconfig libicu-devel automake libjpeg-turbo-devel fann-devel gcc-c++ redhat-rpm-config jq
+        $SUDO yum install -y python python-devel python-pip python-setuptools python-virtualenv python-virtualenvwrapper bison alsa-lib-devel portaudio-devel libmad libmad-devel
     else
         if found_exe tput; then
             green="$(tput setaf 2)"
@@ -100,7 +96,7 @@ install_deps() {
         fi
         echo
         echo "${green}Could not find package manager"
-        echo "${green}Make sure to manually install:${blue} git python 2 python-setuptools python-virtualenv pygobject virtualenvwrapper libtool libffi openssl autoconf bison swig glib2.0 s3cmd portaudio19 mpg123 flac curl fann g++"
+        echo "${green}Make sure to manually install:${blue} python python-setuptools python-virtualenv virtualenvwrapper bison alsa-lib portaudio libmad "
         echo $reset
     fi
 }
@@ -152,17 +148,13 @@ if ! pip install -r requirements.txt; then
     fi
 fi
 
-SYSMEM=$(free|awk '/^Mem:/{print $2}')
-MAXCORES=$(($SYSMEM / 512000))
-CORES=$(nproc)
-
-if [[ ${MAXCORES} -lt ${CORES} ]]; then
-  CORES=${MAXCORES}
-fi
-echo "Building with $CORES cores."
-
 #build and install pocketsphinx
 #cd ${TOP}
 #${TOP}/scripts/install-pocketsphinx.sh -q
 #build and install mimic
+
+# run config script
+echo -e "\n"
+python ${TOP}/client/populate.py
+
 cd "${TOP}"

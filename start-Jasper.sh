@@ -39,7 +39,7 @@ function help() {
   exit 1
 }
 
-_script="{DIR}/mycroft/messagebus/service/main.py"
+_script="${DIR}/Jasper.py"
 first_time=true
 
 function launch-Jasper() {
@@ -49,7 +49,7 @@ function launch-Jasper() {
         first_time=false
     fi
 
-    # Launch process in background, sending log to scripts/log/mycroft-*.log
+    # Launch process
     echo "Starting $1"
     python ${_script} $_params
 }
